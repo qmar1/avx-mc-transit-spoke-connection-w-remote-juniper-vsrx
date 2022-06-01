@@ -1,0 +1,81 @@
+set system syslog user * any emergency
+set system syslog file messages any any
+set system syslog file messages authorization info
+set system syslog file interactive-commands interactive-commands any
+set interfaces ge-0/0/0 unit 0 family inet address {{internet_pvt_ip}}
+set interfaces ge-0/0/1 unit 0 family inet address {{lan_pvt_ip}}
+set interfaces st0 unit 1 family inet address {{tunnel_primary_gw_ip}}
+set interfaces st0 unit 2 family inet address {{tunnel_hagw_ip}}
+set routing-options static route {{primary_gw_remote_ip}} next-hop {{internet_gw_ip}}
+set routing-options static route {{ha_gw_remote_ip}} next-hop {{internet_gw_ip}}
+set routing-options static route 0.0.0.0/0 next-hop {{management_df_gw}}
+set routing-options autonomous-system {{main_as_num}}
+set security policies from-zone internet to-zone lan policy allow-internet-lan match source-address any
+set security policies from-zone internet to-zone lan policy allow-internet-lan match destination-address any
+set security policies from-zone internet to-zone lan policy allow-internet-lan match application any
+set security policies from-zone internet to-zone lan policy allow-internet-lan then permit
+set security policies from-zone lan to-zone internet policy allow-lan-internet match source-address any
+set security policies from-zone lan to-zone internet policy allow-lan-internet match destination-address any
+set security policies from-zone lan to-zone internet policy allow-lan-internet match application any
+set security policies from-zone lan to-zone internet policy allow-lan-internet then permit 
+set security zones security-zone internet tcp-rst
+set security zones security-zone internet host-inbound-traffic system-services all
+set security zones security-zone internet host-inbound-traffic protocols all
+set security zones security-zone internet interfaces ge-0/0/0.0
+set security zones security-zone internet interfaces st0.1
+set security zones security-zone internet interfaces st0.2 
+set security zones security-zone lan host-inbound-traffic system-services all
+set security zones security-zone lan host-inbound-traffic protocols all
+set security zones security-zone lan interfaces ge-0/0/1.0
+set security flow tcp-mss ipsec-vpn mss 1379
+set security ike traceoptions file ike
+set security ike traceoptions flag all
+set security ike proposal gr14-sha256-aes256 authentication-method pre-shared-keys
+set security ike proposal gr14-sha256-aes256 dh-group group14
+set security ike proposal gr14-sha256-aes256 authentication-algorithm sha-256
+set security ike proposal gr14-sha256-aes256 encryption-algorithm aes-256-cbc
+set security ike proposal gr14-sha256-aes256 lifetime-seconds 28800
+set security ike policy policy_1 mode main
+set security ike policy policy_1 proposals gr14-sha256-aes256
+set security ike policy policy_1 pre-shared-key ascii-text {{ psk }}
+set security ike gateway onprem-2-prim-gw ike-policy policy_1
+set security ike gateway onprem-2-prim-gw address {{primary_gw_remote_ip}}
+set security ike gateway onprem-2-prim-gw external-interface ge-0/0/0.0
+set security ike gateway onprem-2-prim-gw dead-peer-detection interval 10
+set security ike gateway onprem-2-prim-gw dead-peer-detection threshold 3
+set security ike gateway onprem-2-ha-gw ike-policy policy_1
+set security ike gateway onprem-2-ha-gw address {{ha_gw_remote_ip}}
+set security ike gateway onprem-2-ha-gw external-interface ge-0/0/0.0
+set security ike gateway onprem-2-ha-gw dead-peer-detection interval 10
+set security ike gateway onprem-2-ha-gw dead-peer-detection threshold 3
+set security ipsec traceoptions flag all
+set security ipsec proposal esp_sha256_aes256 protocol esp
+set security ipsec proposal esp_sha256_aes256 authentication-algorithm hmac-sha-256-128
+set security ipsec proposal esp_sha256_aes256 encryption-algorithm aes-256-cbc
+set security ipsec proposal esp_sha256_aes256 lifetime-seconds 3600
+set security ipsec policy policy_1 perfect-forward-secrecy keys group14
+set security ipsec policy policy_1 proposals esp_sha256_aes256
+set security ipsec vpn onprem-prim-gw bind-interface st0.1
+set security ipsec vpn onprem-prim-gw ike gateway onprem-2-prim-gw
+set security ipsec vpn onprem-prim-gw ike ipsec-policy policy_1
+set security ipsec vpn onprem-prim-gw establish-tunnels immediately
+set security ipsec vpn onprem-ha-gw bind-interface st0.2
+set security ipsec vpn onprem-ha-gw ike gateway onprem-2-ha-gw
+set security ipsec vpn onprem-ha-gw ike ipsec-policy policy_1
+set security ipsec vpn onprem-ha-gw establish-tunnels immediately
+set protocols bgp group vsrx-avx-xsit type external
+set protocols bgp group vsrx-avx-xsit family inet unicast
+set protocols bgp group vsrx-avx-xsit multipath
+set protocols bgp group vsrx-avx-xsit export onprem-sim-cloud
+set protocols bgp group vsrx-avx-xsit local-as {{main_as_num}}
+set protocols bgp group vsrx-avx-xsit neighbor {{remote_pri_tunnel_ip}} local-address {{local_pri_tunnel_ip}}
+set protocols bgp group vsrx-avx-xsit neighbor {{remote_pri_tunnel_ip}} peer-as {{remote_gw_as}}
+set protocols bgp group vsrx-avx-xsit neighbor {{remote_ha_tunnel_ip}} local-address {{local_ha_tunnel_ip}}
+set protocols bgp group vsrx-avx-xsit neighbor {{remote_ha_tunnel_ip}} peer-as {{remote_gw_as}}
+set policy-options policy-statement onprem-sim-cloud term 1 from protocol static
+set policy-options policy-statement onprem-sim-cloud term 1 from route-filter 192.168.0.0/16 orlonger
+set policy-options policy-statement onprem-sim-cloud term 1 then accept
+set policy-options policy-statement onprem-sim-cloud term 2 from protocol direct
+set policy-options policy-statement onprem-sim-cloud term 2 from route-filter {{lan_pvt_subnet}} orlonger
+set policy-options policy-statement onprem-sim-cloud term 2 then accept
+set policy-options policy-statement onprem-sim-cloud term 100 then reject
